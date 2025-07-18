@@ -3,17 +3,18 @@ import re
 import json
 from datetime import datetime
 import os
+import asyncio
 
-# Telegram API credentials (loaded from environment variables for GitHub Actions)
+# Load Telegram credentials from environment variables
 api_id = os.getenv('API_ID')
 api_hash = os.getenv('API_HASH')
 channel_username = os.getenv('CHANNEL_USERNAME')
 
-# Check if credentials are provided
+# Validation
 if not all([api_id, api_hash, channel_username]):
     raise ValueError("Missing required environment variables: API_ID, API_HASH, or CHANNEL_USERNAME")
 
-# Chapter keywords for Class 11 PCM
+# Chapter keywords
 chapter_keywords = {
     'Physics': [
         'physical world', 'units and measurements', 'motion in a straight line', 'motion in a plane',
@@ -35,48 +36,48 @@ chapter_keywords = {
     ]
 }
 
-# Initialize Telegram client
+# Create Telegram client
 client = TelegramClient('session_name', int(api_id), api_hash)
 
+# Subject + Chapter classifier
 def categorize_lecture(text):
     text = text.lower()
-    # Identify subject
-    if any(keyword in text for keyword in ['physics', 'phy']):
+    if any(k in text for k in ['physics', 'phy']):
         subject = 'Physics'
         chapters = chapter_keywords['Physics']
-    elif any(keyword in text for keyword in ['chemistry', 'chem']):
+    elif any(k in text for k in ['chemistry', 'chem']):
         subject = 'Chemistry'
         chapters = chapter_keywords['Chemistry']
-    elif any(keyword in text for keyword in ['math', 'mathematics', 'maths']):
+    elif any(k in text for k in ['math', 'mathematics', 'maths']):
         subject = 'Mathematics'
         chapters = chapter_keywords['Mathematics']
     else:
         return 'Unknown', 'Unknown'
-
-    # Identify chapter
+    
     for chapter in chapters:
         if chapter in text:
             return subject, chapter
     return subject, 'Unknown'
 
+# Extract YouTube links
 async def extract_youtube_links():
     youtube_links = []
     async with client:
-        async for message in client.iter_messages(channel_username, limit=100):  # Adjust limit as needed
+        async for message in client.iter_messages(channel_username, limit=1000):
             if message.text:
-                # Extract YouTube URLs
                 urls = re.findall(r'(https?://(?:www\.)?youtube\.com/watch\?v=[\w-]{11}|https?://youtu\.be/[\w-]{11})', message.text)
                 for url in urls:
                     subject, chapter = categorize_lecture(message.text)
                     youtube_links.append({
                         'url': url,
-                        'title': message.text[:50].strip(),  # First 50 chars as title
+                        'title': message.text[:70].strip(),
                         'date': message.date.strftime('%Y-%m-%d'),
                         'subject': subject,
                         'chapter': chapter
                     })
     return youtube_links
 
+# Save to JSON file
 async def save_to_json(data, filename='lectures.json'):
     try:
         with open(filename, 'r') as f:
@@ -84,7 +85,6 @@ async def save_to_json(data, filename='lectures.json'):
     except FileNotFoundError:
         existing_data = []
 
-    # Avoid duplicates by URL
     existing_urls = {item['url'] for item in existing_data}
     new_data = [item for item in data if item['url'] not in existing_urls]
     updated_data = existing_data + new_data
@@ -92,10 +92,19 @@ async def save_to_json(data, filename='lectures.json'):
     with open(filename, 'w') as f:
         json.dump(updated_data, f, indent=4)
 
+# Main async function
 async def main():
+    print("🔁 Extracting YouTube links from Telegram...")
     links = await extract_youtube_links()
+    print(f"✅ Found {len(links)} new video(s)")
     await save_to_json(links)
+    print("💾 Data saved to lectures.json")
 
+# Runner
 if __name__ == '__main__':
-    with client:
-        client.loop.run_until_complete(main())
+    try:
+        asyncio.run(main())
+    except RuntimeError:
+        # For environments like Windows/Jupyter
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(main())
