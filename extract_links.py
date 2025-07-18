@@ -96,6 +96,6 @@ async def main():
     links = await extract_youtube_links()
     await save_to_json(links)
 
-if _name_ == '_main_':
+if __name__ == '__main__':
     with client:
         client.loop.run_until_complete(main())
