@@ -1,0 +1,30 @@
+name: Update Lectures JSON
+on:
+  schedule:
+    - cron: '30 16 * * *'  # 10 PM IST (16:30 UTC)
+  workflow_dispatch:  # Allows manual triggering
+jobs:
+  update-json:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+    - name: Set Up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    - name: Install Dependencies
+      run: pip install telethon
+    - name: Run Script
+      env:
+        API_ID: ${{ secrets.API_ID }}
+        API_HASH: ${{ secrets.API_HASH }}
+        CHANNEL_USERNAME: ${{ secrets.CHANNEL_USERNAME }}
+      run: python extract_links.py
+    - name: Commit and Push Changes
+      run: |
+        git config user.name "GitHub Action"
+        git config user.email "action@github.com"
+        git add lectures.json
+        git commit -m "Update lectures.json at $(date)" || echo "No changes to commit"
+        git push
